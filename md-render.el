@@ -361,13 +361,31 @@ why this package carries the same licence."
         (and (fboundp fn) fn))
       #'shr-generic))
 
+(defun md--stamp-heading-level (start end level)
+  "Record LEVEL on the heading rendered between START and END.
+Emacs 30's `shr\' does this itself, but earlier ones do not, and the
+outline machinery has nothing else to find headings by.  Stamping it
+here rather than relying on shr also keeps the package off an
+implementation detail of a library it does not own."
+  (unless (get-text-property start 'outline-level)
+    (save-excursion
+      (goto-char start)
+      (skip-chars-forward " \t\n" end)
+      (when (< (point) end)
+        (put-text-property (point) (min end (line-end-position))
+                           'outline-level level)))))
+
 (defun md--stamping-renderer (tag)
   "Return a renderer for TAG that records its source line."
-  (let ((base (md--base-renderer tag)))
+  (let ((base (md--base-renderer tag))
+        (level (and (string-match "\\`h\\([1-6]\\)\\'" (symbol-name tag))
+                    (string-to-number (match-string 1 (symbol-name tag))))))
     (lambda (dom &rest args)
       (let ((start (point))
             (line (and (consp dom) (dom-attr dom 'data-line))))
         (apply base dom args)
+        (when (and level (> (point) start))
+          (md--stamp-heading-level start (point) level))
         (when (and line (> (point) start))
           (md--stamp-region start (point) (string-to-number line)))))))
 

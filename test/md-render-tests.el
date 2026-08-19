@@ -108,6 +108,7 @@
       (should (md-render-test--search "[image: alt]")))))
 
 (ert-deftest md-render-local-image-is-displayed ()
+  (skip-unless (image-type-available-p 'png))
   (md-render-test--with "![pic](img/diagram.png)\n"
     (goto-char (point-min))
     (let ((found nil))
@@ -306,3 +307,25 @@ land in exactly the same place."
       (md-render-test--with markdown
         (dotimes (line 100)
           (should (= (md-render-position-for-line line) (linear line))))))))
+
+(ert-deftest md-render-stamps-heading-level-itself ()
+  "Emacs 29's shr records no outline level, so md-render must.
+Locally shr gets there first, so the stamping is exercised directly."
+  (with-temp-buffer
+    (insert "\n\nHeading text\nbody line\n")
+    (md--stamp-heading-level (point-min) (point-max) 3)
+    (goto-char (point-min))
+    (should (search-forward "Heading text" nil t))
+    (should (equal (get-text-property (match-beginning 0) 'outline-level) 3))
+    ;; Only the heading's own line is claimed, not what follows it.
+    (goto-char (point-min))
+    (should (search-forward "body line" nil t))
+    (should-not (get-text-property (match-beginning 0) 'outline-level))))
+
+(ert-deftest md-render-does-not-fight-shr-over-the-level ()
+  "Where shr already recorded a level, leave it alone."
+  (with-temp-buffer
+    (insert "Heading\n")
+    (put-text-property (point-min) (1+ (point-min)) 'outline-level 1)
+    (md--stamp-heading-level (point-min) (point-max) 5)
+    (should (equal (get-text-property (point-min) 'outline-level) 1))))
