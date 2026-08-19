@@ -239,3 +239,25 @@
 
 (provide 'md-nav-tests)
 ;;; md-nav-tests.el ends here
+
+(ert-deftest md-outline-search-fallback-matches-the-builtin ()
+  "The fallback runs where `outline-search-level' is unavailable.
+It has to find the same headings, at the same levels, as the built-in."
+  (md-nav-test--rendered "docs/design.md"
+    (let ((builtin '()) (fallback '()))
+      (cl-flet ((walk (search)
+                  (let ((found '()))
+                    (save-excursion
+                      (goto-char (point-min))
+                      (let ((outline-search-function search))
+                        (while (outline-next-heading)
+                          (push (cons (funcall outline-level)
+                                      (buffer-substring-no-properties
+                                       (point) (line-end-position)))
+                                found))))
+                    (nreverse found))))
+        (setq fallback (walk #'md-outline--search))
+        (when (fboundp 'outline-search-level)
+          (setq builtin (walk #'outline-search-level))
+          (should (equal fallback builtin)))
+        (should (= (length fallback) 3))))))

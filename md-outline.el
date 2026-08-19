@@ -161,9 +161,43 @@ which is meaningless when headings are found by text property."
       (outline-cycle)
     (shr-next-link)))
 
+(defun md-outline--search (&optional bound move backward looking-at)
+  "Find the next heading, by text property rather than by regexp.
+Stands in for `outline-search-level\' where that is not available.  The
+arguments are as `outline-search-function\' documents them."
+  (if looking-at
+      (and (md-outline--level-at (point))
+           (or (bobp) (not (md-outline--level-at (1- (point))))))
+    (let ((found nil)
+          (position (point)))
+      (while (and (not found)
+                  (setq position (if backward
+                                     (previous-single-property-change
+                                      position 'outline-level)
+                                   (next-single-property-change
+                                    position 'outline-level))))
+        (when (and (md-outline--level-at position)
+                   (or (null bound)
+                       (if backward (>= position bound) (<= position bound))))
+          (setq found position)))
+      (cond
+       (found
+        (goto-char found)
+        (set-match-data (list found (line-end-position)))
+        t)
+       (move
+        (goto-char (or bound (if backward (point-min) (point-max))))
+        nil)
+       (t nil)))))
+
 (defun md-outline-setup ()
   "Turn on outline and imenu for the current rendered document."
-  (setq-local outline-search-function #'outline-search-level)
+  ;; `outline-search-level' searches the very property shr writes, but it is
+  ;; not in every Emacs this package supports.
+  (setq-local outline-search-function
+              (if (fboundp 'outline-search-level)
+                  #'outline-search-level
+                #'md-outline--search))
   (setq-local outline-level #'md-outline-level)
   (setq-local imenu-create-index-function #'md-outline-imenu-index)
   (outline-minor-mode 1))

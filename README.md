@@ -14,6 +14,18 @@ leaves every `#`, `**` and `[label](url)` on screen, which is the right choice
 for editing. `md-mode` is for reading: the markup goes away and a document
 appears.
 
+## Documentation
+
+A full Info manual ships in `doc/`. Read it inside Emacs:
+
+```elisp
+(info (expand-file-name "doc/md-mode.info" "~/.emacs.d/md-mode"))
+```
+
+It covers everything here plus the design notes: why rendering is a
+transaction, why the split view syncs by source line, and what the safety
+model actually guarantees. This README is the short version.
+
 ## Requirements
 
 Emacs 29.1 or later. Nothing else - no pandoc, no Node, no browser. Rendering
@@ -197,10 +209,14 @@ than from the major mode, because a global minor mode such as
 
     ./run-tests.sh
 
-Byte-compiles the five files and runs 84 ERT tests: the parser against DOM
+Byte-compiles the five files, builds the manual and checks every node
+resolves, then runs 85 ERT tests: the parser against DOM
 shapes, the renderer against the buffer it produces, and navigation against
 real fixture documents - including regressions for every defect found in
 review.
+
+CI runs the same script on Emacs 29.1, 29.4 and 30.1, so the version in
+`Package-Requires` is tested rather than assumed.
 
 ## Known limits
 
