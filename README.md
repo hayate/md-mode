@@ -43,16 +43,56 @@ command, so nothing is loaded until you first run it.
 
 ## Keys in a rendered document
 
-| Key       | Does                                     |
-|-----------|------------------------------------------|
-| `q`       | back to the Markdown source              |
-| `g`       | re-render                                |
-| `TAB`     | next link                                |
-| `S-TAB`   | previous link                            |
-| `RET`     | follow the link at point                 |
+| Key | Does |
+|---|---|
+| `q` | back to the Markdown source |
+| `g` | re-render |
+| `s` | source and document side by side, in step |
+| `RET` | follow the link at point |
+| `TAB` | fold or unfold the section at point; elsewhere, next link |
+| `S-TAB` | cycle the folding of the whole document |
+| `n` / `p` | next / previous link |
+| `i` | jump to a heading with imenu |
+| `t` | jump to a heading from a table of contents |
+| `l` / `r` | back / forward through documents you have followed |
+| `^` | open the directory the document lives in |
 
 The view re-renders when you save the source, when you revert it, and when the
-window width changes.
+window width changes. Folds survive a re-render.
+
+## Navigating
+
+A design document is usually half prose and half an index into a codebase, so
+md-mode makes that index navigable.
+
+**File references.** An inline code span holding something like
+`` `lib/thing.py:147` `` becomes a link that opens the file at line 147. It
+becomes a link *only if the file is actually there*, resolved against the
+document's directory, then its project root, then `md-link-roots`. An
+unreachable reference stays ordinary inline code - so linkiness is a live
+signal that the document and the code still agree. Move the document, or the
+file, and the link quietly stops being one.
+
+Set `md-link-roots` when a document points into a different checkout than the
+one it lives in, which is the normal case for a folder of specs:
+
+```elisp
+;; .dir-locals.el in your specs directory
+((nil . ((md-link-roots . ("~/src/api" "~/src/models")))))
+```
+
+**Other documents.** A link to a local `.md` file opens it rendered rather than
+in a browser, and `l` / `r` walk back and forward, so a folder of
+cross-referencing specs reads like a small wiki. External URLs still go to the
+browser.
+
+**Long documents.** Headings are real outline headings: fold with `TAB`, cycle
+the whole document with `S-TAB`, jump with `i` or `t`.
+
+**Side by side.** `s` puts the source and the rendered document in two windows
+that follow each other. They are kept in step by *source line*, not by buffer
+position - rendering is lossy, since a whole paragraph maps to its first line,
+so round-tripping raw positions would make point crawl.
 
 ## What it renders
 
@@ -113,6 +153,10 @@ would cost more than it buys.
 | `md-rerender-delay` | `0.3` | number of seconds | idle time after a resize before re-rendering |
 | `md-view-margin` | `2` | integer columns; `0` disables | blank left margin in the rendered view |
 | `md-view-hide-line-numbers` | `t` | `t` or `nil` | hide the gutter, whose numbers count rendered lines |
+| `md-link-roots` | `nil` | list of directories | extra roots that file references may resolve inside |
+| `md-link-max-references` | `500` | integer | most references resolved in one document |
+| `md-link-follow-markdown` | `t` | `t` or `nil` | a link to a local `.md` opens rendered |
+| `md-outline-fold-on-render` | `t` | `t` or `nil` | folded sections stay folded across a re-render |
 
 Every one of these is a `defcustom`, so `M-x customize-group RET md RET` shows
 them with their documentation and enforces the types above.
@@ -123,6 +167,12 @@ Faces: `md-code-block`, `md-blockquote`, `md-blockquote-bar`, plus the standard
 ## How it works
 
     markdown text --md-parse--> DOM --shr--> rendered buffer
+
+    md-parse.el    markdown -> DOM
+    md-render.el   DOM -> buffer, via shr
+    md-link.el     file references and links out of the document
+    md-outline.el  folding, imenu, table of contents
+    md-mode.el     the command, the view mode, split view, history
 
 `md-parse.el` turns Markdown into the DOM representation `dom.el` uses and
 `shr` consumes: `(TAG ATTRIBUTE-ALIST CHILD...)`, strings as text nodes. No HTML
@@ -147,9 +197,10 @@ than from the major mode, because a global minor mode such as
 
     ./run-tests.sh
 
-Byte-compiles the three files and runs 67 ERT tests: the parser against DOM
-shapes and the renderer against the buffer it produces, including regressions
-for every defect found in review.
+Byte-compiles the five files and runs 84 ERT tests: the parser against DOM
+shapes, the renderer against the buffer it produces, and navigation against
+real fixture documents - including regressions for every defect found in
+review.
 
 ## Known limits
 
@@ -160,6 +211,10 @@ for every defect found in review.
   rows map line by line. Inside a paragraph it can only be per block, because
   filling means a source line no longer corresponds to any one rendered line.
   Toggling from the middle of a long paragraph returns you to its first line.
+- A re-render erases and rebuilds the buffer, so anything anchored to a
+  position has to be re-derived. Point, window starts and folds are carried
+  across by source line and heading name, and imenu's index is rebuilt.
+  Anything added later should do the same rather than hold a position.
 - Rendering is linear in document size but not free. Measured on this machine:
   32 KB takes about 110 ms end to end, 128 KB about 580 ms. The parsed tree is
   cached against the buffer's modification tick, so a resize re-renders without

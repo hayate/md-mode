@@ -3,6 +3,7 @@
 ;;; Code:
 
 (require 'ert)
+(require 'cl-lib)
 (require 'md-render)
 (require 'md-mode)
 
@@ -284,3 +285,24 @@ it off later than that."
             ;; The source is left alone.
             (should (equal (buffer-local-value 'left-margin-width source) 0))))
       (when (buffer-live-p source) (kill-buffer source)))))
+
+(ert-deftest md-render-line-index-matches-a-linear-scan ()
+  "The binary search must agree with the scan it replaced.
+`md-sync-mode' looks up a position on every command, so the lookup has
+to be indexed rather than a walk over the whole buffer -- but it must
+land in exactly the same place."
+  (cl-flet ((linear (line)
+              (let ((pos (point-min)) (best (point-min)) (best-line 0))
+                (while pos
+                  (let ((here (get-text-property pos 'md-source-line)))
+                    (when (and here (<= here line) (> here best-line))
+                      (setq best pos best-line here)))
+                  (setq pos (next-single-property-change pos 'md-source-line)))
+                best)))
+    (let ((markdown (with-temp-buffer
+                      (insert-file-contents
+                       (expand-file-name "corpus.md" md-render-test--directory))
+                      (buffer-string))))
+      (md-render-test--with markdown
+        (dotimes (line 100)
+          (should (= (md-render-position-for-line line) (linear line))))))))

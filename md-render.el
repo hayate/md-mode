@@ -4,7 +4,7 @@
 
 ;; Author: Andrea <andrea@byteset.com>
 ;; URL: https://github.com/hayate/md-mode
-;; Version: 0.1.0
+;; Version: 0.2.0
 ;; Package-Requires: ((emacs "29.1"))
 ;; Keywords: languages, docs, markdown, hypermedia
 
@@ -104,6 +104,12 @@ running its body and hooks."
 
 (defvar-local md--base-directory nil
   "Directory that relative image paths are resolved against.")
+
+(defvar-local md--line-index nil
+  "Vector of (SOURCE-LINE . POSITION), ordered by line.
+Built once per render.  Walking the whole buffer per lookup is fine for
+a toggle but far too slow for `md-sync-mode\', which looks up on every
+command.")
 
 ;;; Syntax highlighting of code blocks
 
@@ -264,6 +270,25 @@ FIRST-LINE is the source line of the first line of the block."
           (setq line (1+ line))
           (forward-line 1))))))
 
+(defvar md-render-before-hook nil
+  "Functions run in the buffer at the start of each render.")
+
+(defvar md-render-code-span-functions nil
+  "Functions called for each rendered inline code span, with START and END.
+This is how `md-link\' turns a span such as `md-parse.el:1\' into a
+link without `md-render\' having to know anything about references.")
+
+(defvar md-render-link-map nil
+  "Keymap installed on links, or nil for shr's own.
+Bound during rendering so that `shr-urlify\' installs it itself, which
+leaves the keymaps shr puts on linked images alone.")
+
+(defun md--render-code (dom)
+  "Render an inline code span DOM, offering it to decorators."
+  (let ((start (point)))
+    (shr-tag-code dom)
+    (run-hook-with-args 'md-render-code-span-functions start (point))))
+
 (defconst md--stamped-tags
   '(p h1 h2 h3 h4 h5 h6 blockquote pre ul ol li table td th hr div)
   "Block tags whose rendered extent is mapped back to a source line.")
@@ -348,9 +373,10 @@ why this package carries the same licence."
 
 (defun md--rendering-functions ()
   "Build the value for `shr-external-rendering-functions'."
-  (cons (cons 'img #'md--render-img)
-        (mapcar (lambda (tag) (cons tag (md--stamping-renderer tag)))
-                md--stamped-tags)))
+  (append (list (cons 'img #'md--render-img)
+                (cons 'code #'md--render-code))
+          (mapcar (lambda (tag) (cons tag (md--stamping-renderer tag)))
+                  md--stamped-tags)))
 
 
 ;;; Table junctions
@@ -457,11 +483,18 @@ width of the selected window."
         ;; Never hand a document's media to an embedded browser, whatever the
         ;; user has configured globally.
         (shr-use-xwidgets-for-media nil)
+        ;; shr-urlify installs `shr-map' itself, and deliberately leaves any
+        ;; keymap already on the text alone -- an image's, say.  Binding the
+        ;; variable therefore gets our bindings onto links without
+        ;; overwriting anything shr was protecting.
+        (shr-map (or md-render-link-map shr-map))
         (shr-external-rendering-functions (md--rendering-functions)))
     (setq md--base-directory (or base-directory default-directory))
+    (run-hooks 'md-render-before-hook)
     (erase-buffer)
     (shr-insert-document dom)
     (md--beautify-tables)
+    (setq md--line-index nil)
     (goto-char (point-min))))
 
 ;;; Mapping between source and rendered positions
@@ -482,15 +515,36 @@ width of the selected window."
           (and next (get-text-property next 'md-source-line)))
         1)))
 
-(defun md-render-position-for-line (line)
-  "Position in the rendered buffer that best corresponds to source LINE."
-  (let ((pos (point-min)) (best (point-min)) (best-line 0))
+(defun md--build-line-index ()
+  "Collect the source line stamps in this buffer into a sorted vector."
+  (let ((entries '())
+        (pos (point-min))
+        (seen (make-hash-table :test #'eql)))
     (while pos
-      (let ((here (get-text-property pos 'md-source-line)))
-        (when (and here (<= here line) (> here best-line))
-          (setq best pos best-line here)))
+      (let ((line (get-text-property pos 'md-source-line)))
+        (when (and line (not (gethash line seen)))
+          (puthash line t seen)
+          (push (cons line pos) entries)))
       (setq pos (next-single-property-change pos 'md-source-line)))
-    best))
+    (vconcat (sort (nreverse entries)
+                   (lambda (a b) (< (car a) (car b)))))))
+
+(defun md-render-position-for-line (line)
+  "Position in the rendered buffer that best corresponds to source LINE.
+The nearest block starting at or before LINE, found by binary search."
+  (let* ((index (or md--line-index
+                    (setq md--line-index (md--build-line-index))))
+         (count (length index)))
+    (if (zerop count)
+        (point-min)
+      (let ((low 0) (high (1- count)) (best (point-min)))
+        (while (<= low high)
+          (let* ((mid (/ (+ low high) 2))
+                 (entry (aref index mid)))
+            (if (<= (car entry) line)
+                (progn (setq best (cdr entry)) (setq low (1+ mid)))
+              (setq high (1- mid)))))
+        best))))
 
 (provide 'md-render)
 ;;; md-render.el ends here

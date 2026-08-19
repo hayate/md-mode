@@ -4,7 +4,7 @@
 
 ;; Author: Andrea <andrea@byteset.com>
 ;; URL: https://github.com/hayate/md-mode
-;; Version: 0.1.0
+;; Version: 0.2.0
 ;; Package-Requires: ((emacs "29.1"))
 ;; Keywords: languages, docs, markdown, hypermedia
 
@@ -42,6 +42,8 @@
 
 (require 'md-parse)
 (require 'md-render)
+(require 'md-outline)
+(require 'md-link)
 
 (defcustom md-auto-rerender-max-size 200000
   "Documents larger than this many characters are not re-rendered automatically.
@@ -86,8 +88,21 @@ whatever `display-line-numbers-mode' does elsewhere alone."
 (defvar-local md--rerender-timer nil
   "This view's pending re-render, if any.")
 
+(defvar-local md--generation 0
+  "Bumped by every render.
+A render erases the buffer, so any position captured before one refers
+to text that no longer exists.  Deferred work carries the generation it
+was scheduled under and is dropped if the document has been rebuilt
+since.")
+
 (defvar md--rendering nil
   "Bound while rendering, so that layout changes cannot re-enter.")
+
+(defvar-local md--sync-peer nil
+  "The buffer this one is kept in step with.")
+
+(defvar-local md--sync-anchor nil
+  "Source line both sides were last agreed to be on.")
 
 ;; `revert-buffer' resets the major mode, which clears ordinary buffer-local
 ;; variables and buffer-local hooks.  Without these the source would forget its
@@ -129,8 +144,38 @@ mode body has already had its say."
   (dolist (window (get-buffer-window-list (current-buffer) nil t))
     (set-window-margins window md-view-margin)))
 
+(defun md--capture-state ()
+  "Capture what has to survive a re-render.
+Everything here is anchored to a source line or a heading name rather
+than to a buffer position, because the positions are about to be
+destroyed."
+  (list :line (and md--rendered-width (md-render-source-line (point)))
+        :windows (mapcar (lambda (window)
+                           (cons window (md-render-source-line
+                                         (window-start window))))
+                         (get-buffer-window-list (current-buffer) nil t))
+        :folds (md-outline-folded-headings)))
+
+(defun md--restore-state (state)
+  "Put back what `md--capture-state\' recorded in STATE."
+  (md-outline-invalidate)
+  (md-outline-refold (plist-get state :folds))
+  (when-let ((line (plist-get state :line)))
+    (goto-char (md-render-position-for-line line))
+    ;; Point may have landed inside a section that is folded again.
+    (when (get-char-property (point) 'invisible)
+      (ignore-errors (outline-back-to-heading))))
+  (pcase-dolist (`(,window . ,line) (plist-get state :windows))
+    (when (and (window-live-p window)
+               (eq (window-buffer window) (current-buffer)))
+      (set-window-start window (md-render-position-for-line line) t)
+      (set-window-point window (point)))))
+
 (defun md--render-into (view source &optional width)
-  "Render SOURCE into VIEW at WIDTH."
+  "Render SOURCE into VIEW at WIDTH.
+A render erases and rebuilds the buffer, so this is a transaction:
+state anchored to positions is captured first, the document is rebuilt,
+and the state is resolved against the new text."
   (let ((md--rendering t)
         (dom (md--dom source))
         (directory (with-current-buffer source
@@ -139,16 +184,15 @@ mode body has already had its say."
                        default-directory))))
     (with-current-buffer view
       (let ((inhibit-read-only t)
-            (line (and (bound-and-true-p md--rendered-width)
-                       (md-render-source-line (point)))))
+            (state (md--capture-state)))
         ;; Before rendering, not after: the margin narrows the text area,
         ;; and the render measures that area to decide where to fill.
         (md--tidy-display)
         (md-render-dom dom directory width)
+        (setq md--generation (1+ md--generation))
         (setq md--rendered-width (or width (md-render-width)))
         (set-buffer-modified-p nil)
-        (when line
-          (goto-char (md-render-position-for-line line)))))))
+        (md--restore-state state)))))
 
 (defun md--refresh (&rest _)
   "Re-render the view of the current source buffer, if it has one."
@@ -159,11 +203,19 @@ mode body has already had its say."
 
 (defvar-keymap md-view-mode-map
   :doc "Keymap for `md-view-mode'."
-  "q"       #'md-mode
-  "TAB"     #'shr-next-link
-  "<tab>"   #'shr-next-link
-  "S-TAB"   #'shr-previous-link
-  "<backtab>" #'shr-previous-link)
+  "q"         #'md-mode
+  "TAB"       #'md-outline-tab
+  "<tab>"     #'md-outline-tab
+  "S-TAB"     #'outline-cycle-buffer
+  "<backtab>" #'outline-cycle-buffer
+  "n"         #'shr-next-link
+  "p"         #'shr-previous-link
+  "i"         #'imenu
+  "t"         #'md-outline-toc
+  "l"         #'md-link-back
+  "r"         #'md-link-forward
+  "^"         #'md-link-up
+  "s"         #'md-split)
 
 (define-derived-mode md-view-mode special-mode "MD-View"
   "Major mode for a rendered Markdown document.
@@ -172,6 +224,8 @@ mode body has already had its say."
   (setq-local revert-buffer-function #'md--revert)
   (setq-local cursor-type 'bar)
   (buffer-face-set 'variable-pitch)
+  (md-outline-setup)
+  (md-link-setup)
   (add-hook 'kill-buffer-hook #'md--view-killed nil t))
 
 (defun md--revert (&rest _)
@@ -182,6 +236,7 @@ mode body has already had its say."
 
 (defun md--view-killed ()
   "Drop the source buffer's pointer to this view."
+  (md--sync-disable md--sync-peer)
   (when md--rerender-timer
     (cancel-timer md--rerender-timer)
     (setq md--rerender-timer nil))
@@ -246,6 +301,174 @@ mode body has already had its say."
 Hooked on first use rather than at load, so that merely requiring the
 package costs a global hook that fires on every resize in every frame."
   (add-hook 'window-size-change-functions #'md--window-size-changed))
+
+
+;;; Walking between documents
+;;
+;; Each document keeps its own view, which leaves the one-source-one-view
+;; ownership in place: a view is never repointed at a different source, so
+;; saving or killing one document cannot disturb another's view.  What moves
+;; between them is the history.
+
+(defvar-local md--history nil
+  "Places visited before this one, as (FILE . SOURCE-LINE).")
+
+(defvar-local md--forward nil
+  "Places returned from, so that going back can be undone.")
+
+(defun md--current-place ()
+  "Where we are, as (FILE . SOURCE-LINE), or nil outside a file."
+  (let ((source (if (derived-mode-p 'md-view-mode) md--source-buffer (current-buffer))))
+    (when (and (buffer-live-p source) (buffer-file-name source))
+      (cons (buffer-file-name source)
+            (if (derived-mode-p 'md-view-mode)
+                (md-render-source-line (point))
+              (line-number-at-pos))))))
+
+(defun md--open-document (file &optional line)
+  "Open FILE rendered, at LINE.  Leaves the view current.
+The switch must not happen inside `with-current-buffer\': that form
+restores the previous buffer on exit, so the window would show the new
+document while point, and any buffer-local state we then set, belonged
+to the old one."
+  (let ((source (find-file-noselect file)))
+    (with-current-buffer source
+      (when line
+        (goto-char (point-min))
+        (forward-line (1- line))))
+    (switch-to-buffer source)
+    (when md-link-follow-markdown
+      (md--show-render))))
+
+(defun md-link-visit-document (file &optional line)
+  "Open FILE as a rendered document, remembering where we came from."
+  (let ((origin (md--current-place)))
+    (md--open-document file line)
+    (when (and origin (derived-mode-p 'md-view-mode))
+      (setq md--history (cons origin md--history))
+      (setq md--forward nil))))
+
+(defun md--step (from to)
+  "Move to the head of FROM, pushing where we are onto TO.
+FROM and TO name the buffer-local variables holding the two stacks."
+  (let ((stack (symbol-value from)))
+    (if (null stack)
+        (message "md-mode: nothing to go %s to"
+                 (if (eq from 'md--history) "back" "forward"))
+      (let ((here (md--current-place))
+            (target (car stack))
+            (rest (cdr stack))
+            (other (symbol-value to)))
+        (md--open-document (car target) (cdr target))
+        (when (derived-mode-p 'md-view-mode)
+          (set from rest)
+          (set to (if here (cons here other) other)))))))
+
+(defun md-link-back ()
+  "Return to the document visited before this one."
+  (interactive)
+  (md--step 'md--history 'md--forward))
+
+(defun md-link-forward ()
+  "Undo a `md-link-back'."
+  (interactive)
+  (md--step 'md--forward 'md--history))
+
+(defun md-link-up ()
+  "Open the directory the document lives in."
+  (interactive)
+  (let ((source (if (derived-mode-p 'md-view-mode) md--source-buffer (current-buffer))))
+    (if (and (buffer-live-p source) (buffer-file-name source))
+        (dired (file-name-directory (buffer-file-name source)))
+      (message "md-mode: this document is not visiting a file"))))
+
+;;; Side by side
+;;
+;; The two buffers are kept in step by source line, not by buffer position.
+;; That matters: rendering is lossy -- a whole paragraph maps to its first
+;; line -- so round-tripping a position would let point crawl backwards a
+;; little on every command.  An anchor only moves when the user actually
+;; moves it, and both sides are set to the same anchor, so there is nothing
+;; to drift.
+
+(defun md--sync-anchor-here ()
+  "The source line point is on, whichever side of the split this is."
+  (if (derived-mode-p 'md-view-mode)
+      (md-render-source-line (point))
+    (line-number-at-pos)))
+
+(defun md--sync-position-for (line)
+  "Where LINE is in this buffer."
+  (if (derived-mode-p 'md-view-mode)
+      (md-render-position-for-line line)
+    (save-excursion
+      (goto-char (point-min))
+      (forward-line (1- line))
+      (point))))
+
+(defun md--sync-post-command ()
+  "Move the other side of the split to wherever this side now is."
+  (when (and md--sync-peer (buffer-live-p md--sync-peer) (not md--rendering))
+    (let ((anchor (md--sync-anchor-here))
+          (peer md--sync-peer))
+      (unless (eql anchor md--sync-anchor)
+        (setq md--sync-anchor anchor)
+        (with-current-buffer peer
+          (setq md--sync-anchor anchor)
+          (let ((position (md--sync-position-for anchor)))
+            ;; Point only.  Forcing `window-start' as well fights redisplay's
+            ;; own scrolling and makes the peer window jitter.
+            ;;
+            ;; Both the buffer point and every window point are moved.  The
+            ;; peer is never the selected window here, so its buffer point
+            ;; would otherwise stay where it was, and a later re-render --
+            ;; which reads `point' to decide where to land -- would undo the
+            ;; scrolling the user just did.
+            (goto-char position)
+            (dolist (window (get-buffer-window-list peer nil t))
+              (set-window-point window position))))))))
+
+(defun md--sync-enable (buffer peer)
+  "Keep BUFFER in step with PEER."
+  (with-current-buffer buffer
+    (setq md--sync-peer peer)
+    (setq md--sync-anchor nil)
+    (add-hook 'post-command-hook #'md--sync-post-command nil t)))
+
+(defun md--sync-disable (buffer)
+  "Stop keeping BUFFER in step with anything."
+  (when (buffer-live-p buffer)
+    (with-current-buffer buffer
+      (setq md--sync-peer nil)
+      (remove-hook 'post-command-hook #'md--sync-post-command t))))
+
+;;;###autoload
+(defun md-split ()
+  "Show the Markdown source and the rendered document side by side.
+Moving in one window moves the other.  Saving re-renders.  Call it
+again to put the windows back."
+  (interactive)
+  (let ((source (if (derived-mode-p 'md-view-mode) md--source-buffer (current-buffer))))
+    (unless (buffer-live-p source)
+      (user-error "md-mode: no Markdown source here"))
+    (if (buffer-local-value 'md--sync-peer source)
+        (let ((view (buffer-local-value 'md--sync-peer source)))
+          (md--sync-disable source)
+          (md--sync-disable view)
+          (switch-to-buffer source)
+          (delete-other-windows)
+          (message "md-mode: split closed"))
+      ;; Not inside `with-current-buffer': it restores the old buffer on
+      ;; exit, so `view' would end up bound to the source.
+      (switch-to-buffer source)
+      (md--show-render)
+      (let ((view (current-buffer)))
+        (delete-other-windows)
+        (switch-to-buffer source)
+        (set-window-buffer (split-window-right) view)
+        (md--sync-enable source view)
+        (md--sync-enable view source)
+        (message "md-mode: source and document in step; s to close")))))
 
 ;;; The command
 
