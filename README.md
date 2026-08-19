@@ -99,17 +99,23 @@ would cost more than it buys.
 
 ## Customization
 
-| Variable                        | Default | Meaning                                    |
-|---------------------------------|---------|--------------------------------------------|
-| `md-render-max-width`           | 100     | maximum line width in characters           |
-| `md-render-remote-images`       | nil     | download images with remote URLs           |
-| `md-render-highlight-code`      | t       | syntax-highlight fenced code               |
-| `md-render-language-modes`      | ...     | fence label to major mode                  |
-| `md-parse-front-matter`         | nil     | render YAML front matter instead of hiding |
-| `md-parse-html-blocks`          | t       | splice raw HTML into the document          |
-| `md-auto-rerender-max-size`     | 200000  | above this, only re-render on demand       |
-| `md-view-margin`                | 2       | columns of blank left margin               |
-| `md-view-hide-line-numbers`     | t       | hide the gutter in the rendered view       |
+| Variable | Default | Allowed values | Meaning |
+|---|---|---|---|
+| `md-render-max-width` | `100` | integer columns; under 20 is treated as 20 | cap on line width, so text stays readable in a wide window |
+| `md-render-remote-images` | `nil` | `t` or `nil` | download and display images with remote URLs |
+| `md-render-highlight-code` | `t` | `t` or `nil` | syntax-highlight fenced code |
+| `md-render-language-modes` | 32 entries | alist of `("label" . mode-symbol)` | fence label to the major mode that highlights it |
+| `md-render-max-highlight-size` | `20000` | integer characters | fences larger than this are left unhighlighted |
+| `md-render-max-image-size` | `8388608` | integer bytes | image files larger than this are not displayed |
+| `md-parse-front-matter` | `nil` | `t` or `nil` | render YAML front matter instead of hiding it |
+| `md-parse-html-blocks` | `t` | `t` or `nil` | parse raw HTML blocks and splice them in |
+| `md-auto-rerender-max-size` | `200000` | integer characters | above this, re-render only on demand with `g` |
+| `md-rerender-delay` | `0.3` | number of seconds | idle time after a resize before re-rendering |
+| `md-view-margin` | `2` | integer columns; `0` disables | blank left margin in the rendered view |
+| `md-view-hide-line-numbers` | `t` | `t` or `nil` | hide the gutter, whose numbers count rendered lines |
+
+Every one of these is a `defcustom`, so `M-x customize-group RET md RET` shows
+them with their documentation and enforces the types above.
 
 Faces: `md-code-block`, `md-blockquote`, `md-blockquote-bar`, plus the standard
 `shr-h1` ... `shr-h6`, `shr-link` and `shr-text`.
