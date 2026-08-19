@@ -1,5 +1,7 @@
 # md-mode
 
+[![tests](https://github.com/hayate/md-mode/actions/workflows/tests.yml/badge.svg)](https://github.com/hayate/md-mode/actions/workflows/tests.yml)
+
 Read Markdown files in Emacs as rendered documents rather than as marked-up
 source.
 
