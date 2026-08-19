@@ -7,7 +7,11 @@ echo "== byte-compiling =="
 emacs -Q --batch -L . --eval '(setq byte-compile-error-on-warn nil)' \
       -f batch-byte-compile md-parse.el md-render.el md-link.el md-outline.el md-mode.el
 echo "== manual =="
-emacs -Q --batch --eval '(progn (require (quote texinfmt)) (find-file "doc/md-mode.texi") (texinfo-format-buffer) (save-buffer))' >/dev/null
+emacs -Q --batch --eval '(let ((make-backup-files nil))
+  (require (quote texinfmt))
+  (find-file "doc/md-mode.texi")
+  (texinfo-format-buffer)
+  (save-buffer))' >/dev/null
 emacs -Q --batch --eval '(let ((file (expand-file-name "doc/md-mode.info")))
   (require (quote info))
   (dolist (node (list "Top" "Installation" "Reading" "Navigating" "File references"
