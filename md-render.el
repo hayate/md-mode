@@ -5,7 +5,6 @@
 ;; Author: Andrea <andrea@byteset.com>
 ;; URL: https://github.com/hayate/md-mode
 ;; Version: 0.2.0
-;; Package-Requires: ((emacs "29.1"))
 ;; Keywords: languages, docs, markdown, hypermedia
 
 ;; This file is not part of GNU Emacs.

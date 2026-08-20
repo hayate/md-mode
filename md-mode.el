@@ -248,7 +248,7 @@ and the state is resolved against the new text."
       (remove-hook 'kill-buffer-hook #'md--source-killed t))))
 
 (defun md--source-killed ()
-  "Kill the view when its source goes away, rather than leave it stale."
+  "Kill the view when its source buffer is gone, rather than leave it stale."
   (when (buffer-live-p md--view-buffer)
     (let ((view md--view-buffer))
       (with-current-buffer view (setq md--source-buffer nil))
@@ -326,7 +326,7 @@ package costs a global hook that fires on every resize in every frame."
               (line-number-at-pos))))))
 
 (defun md--open-document (file &optional line)
-  "Open FILE rendered, at LINE.  Leaves the view current.
+  "Open FILE rendered, at LINE.  Leave the view current.
 The switch must not happen inside `with-current-buffer\': that form
 restores the previous buffer on exit, so the window would show the new
 document while point, and any buffer-local state we then set, belonged
@@ -341,7 +341,7 @@ to the old one."
       (md--show-render))))
 
 (defun md-link-visit-document (file &optional line)
-  "Open FILE as a rendered document, remembering where we came from."
+  "Open FILE as a rendered document at LINE, remembering where we came from."
   (let ((origin (md--current-place)))
     (md--open-document file line)
     (when (and origin (derived-mode-p 'md-view-mode))
@@ -450,7 +450,7 @@ again to put the windows back."
   (interactive)
   (let ((source (if (derived-mode-p 'md-view-mode) md--source-buffer (current-buffer))))
     (unless (buffer-live-p source)
-      (user-error "md-mode: no Markdown source here"))
+      (user-error "The Markdown source buffer is gone"))
     (if (buffer-local-value 'md--sync-peer source)
         (let ((view (buffer-local-value 'md--sync-peer source)))
           (md--sync-disable source)

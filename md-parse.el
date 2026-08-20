@@ -5,7 +5,6 @@
 ;; Author: Andrea <andrea@byteset.com>
 ;; URL: https://github.com/hayate/md-mode
 ;; Version: 0.2.0
-;; Package-Requires: ((emacs "29.1"))
 ;; Keywords: languages, docs, markdown, hypermedia
 
 ;; This file is not part of GNU Emacs.
@@ -484,7 +483,8 @@ word -- snake_case -- are not emphasis; asterisks always are."
   `((data-line . ,(number-to-string (md--ln line)))))
 
 (defun md--list-marker (text)
-  "Return (TYPE NUMBER CONTENT-COLUMN DELIMITER) if TEXT starts a list item."
+  "Return (TYPE NUMBER CONTENT-COLUMN DELIMITER) if TEXT is a list item.
+TEXT is one line, and the value is nil when that line is not an item."
   (cond
    ((string-match "\\`\\( \\{0,3\\}\\)\\([-+*]\\)\\(?:\\([ \t]+\\)\\|\\'\\)" text)
     (list 'ul nil (match-end 0) (match-string 2 text)))

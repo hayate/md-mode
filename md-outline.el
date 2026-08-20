@@ -5,7 +5,6 @@
 ;; Author: Andrea <andrea@byteset.com>
 ;; URL: https://github.com/hayate/md-mode
 ;; Version: 0.2.0
-;; Package-Requires: ((emacs "29.1"))
 ;; Keywords: languages, docs, markdown, hypermedia
 
 ;; This file is not part of GNU Emacs.
@@ -62,8 +61,9 @@ text.  Nil re-renders the document fully unfolded."
 
 (defun md-outline-level ()
   "Level of the heading at point.
-`outline-level' defaults to measuring the width of the regexp match,
-which is meaningless when headings are found by text property."
+The variable `outline-level' defaults to measuring the width of the
+regexp match, which is meaningless when headings are found by text
+property."
   (or (md-outline--level-at (point)) 1))
 
 (defun md-outline-headings ()
@@ -163,8 +163,9 @@ which is meaningless when headings are found by text property."
 
 (defun md-outline--search (&optional bound move backward looking-at)
   "Find the next heading, by text property rather than by regexp.
-Stands in for `outline-search-level\' where that is not available.  The
-arguments are as `outline-search-function\' documents them."
+Stand in for `outline-search-level\' where that is not available.  BOUND,
+MOVE, BACKWARD and LOOKING-AT are as `outline-search-function\'
+documents them."
   (if looking-at
       (and (md-outline--level-at (point))
            (or (bobp) (not (md-outline--level-at (1- (point))))))

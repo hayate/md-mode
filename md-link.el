@@ -5,7 +5,6 @@
 ;; Author: Andrea <andrea@byteset.com>
 ;; URL: https://github.com/hayate/md-mode
 ;; Version: 0.2.0
-;; Package-Requires: ((emacs "29.1"))
 ;; Keywords: languages, docs, markdown, hypermedia
 
 ;; This file is not part of GNU Emacs.
@@ -218,7 +217,7 @@ Inherits `shr-map', so TAB, link copying and image commands still work.")
 ;;; Following
 
 (defun md-link--markdown-p (file)
-  "Non-nil if FILE looks like a Markdown document."
+  "Non-nil if FILE has a Markdown extension."
   (member (downcase (or (file-name-extension file) ""))
           md-link-markdown-extensions))
 
