@@ -3,6 +3,7 @@
 ;; Copyright (C) 2026 Andrea
 
 ;; Author: Andrea <andrea@byteset.com>
+;; Assisted-by: Claude:claude-opus-5
 ;; URL: https://github.com/hayate/md-mode
 ;; Version: 0.2.0
 ;; Keywords: languages, docs, markdown, hypermedia
