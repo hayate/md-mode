@@ -102,6 +102,11 @@ running its body and hooks."
   "Face for the bar drawn down the left of a blockquote."
   :group 'md)
 
+(defface md-blocked-image '((t :inherit shadow))
+  "Face for an image that was not fetched.
+See `md-render-remote-images'."
+  :group 'md)
+
 (defvar-local md--base-directory nil
   "Directory that relative image paths are resolved against.")
 
@@ -217,7 +222,14 @@ calls this from `<object>' and from media posters, hence both arguments."
      ((md--remote-p src)
       (if md-render-remote-images
           (shr-tag-img dom url)
-        (shr-insert (format "[image: %s]" (if (string-empty-p alt) src alt)))))
+        ;; Not fetched, by design.  Show the alt text rather than announcing
+        ;; a failure: a README's badges are images inside links, and
+        ;; "[image: tests]" reads as something broken when nothing is.
+        (let ((start (point)))
+          (shr-insert (if (string-empty-p alt)
+                          (format "\u2b1a %s" src)
+                        (format "\u2b1a %s" alt)))
+          (add-face-text-property start (point) 'md-blocked-image t))))
      (t (md--insert-local-image src alt)))))
 
 (defun md--insert-local-image (src alt)

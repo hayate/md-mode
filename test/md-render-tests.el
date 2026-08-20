@@ -105,7 +105,10 @@
 (ert-deftest md-render-remote-images-are-not-fetched ()
   (let ((md-render-remote-images nil))
     (md-render-test--with "![alt](https://example.com/x.png)\n"
-      (should (md-render-test--search "[image: alt]")))))
+      (should (md-render-test--search "alt"))
+      ;; The alt text, dimmed -- not an announcement that something failed.
+      (goto-char (point-min))
+      (should-not (search-forward "[image:" nil t)))))
 
 (ert-deftest md-render-local-image-is-displayed ()
   (skip-unless (image-type-available-p 'png))
