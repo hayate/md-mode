@@ -521,9 +521,12 @@ happened to contain box-drawing characters."
     ;; default face, while the view shows body text in variable-pitch.  The
     ;; grid is therefore laid out in one font and drawn in another, so the
     ;; rules come up short of the verticals they should meet.  Showing the
-    ;; table in a fixed-pitch face puts the drawing back in the font its
-    ;; geometry was computed in.
-    (add-face-text-property start (point) 'fixed-pitch t)))
+    ;; table in the font its geometry was computed in puts the rules back at
+    ;; the length the columns expect.  Prepended, not appended: shr puts
+    ;; `shr-text' on cell content, which names a proportional family, and the
+    ;; first face in the list wins.
+    (when-let ((face (md--measured-face)))
+      (add-face-text-property start (point) face))))
 
 (defun md--render-hr (dom)
   "Render a thematic break DOM.
