@@ -350,3 +350,20 @@ Without this the rules are drawn shorter than the columns they border."
     (goto-char (point-min))
     (should (search-forward "─" nil t))
     (should (memq 'fixed-pitch (md-render-test--faces-at (1- (point)))))))
+
+(ert-deftest md-render-table-rule-gaps-are-closed ()
+  "shr ends each run of a rule with a blank stretch to the column edge.
+Left alone it is a visible gap in the rule, so it is struck through."
+  (md-render-test--with "| a | b |\n|---|---|\n| 1 | 2 |\n"
+    (goto-char (point-min))
+    (let ((stretches 0)
+          (struck 0)
+          (end (line-end-position)))
+      (dotimes (offset (- end (point-min)))
+        (let ((pos (+ (point-min) offset)))
+          (when (get-text-property pos 'shr-table-indent)
+            (setq stretches (1+ stretches))
+            (when (memq 'md-table-rule (md-render-test--faces-at pos))
+              (setq struck (1+ struck))))))
+      (should (> stretches 0))
+      (should (= stretches struck)))))

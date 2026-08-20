@@ -107,6 +107,13 @@ running its body and hooks."
 See `md-render-remote-images'."
   :group 'md)
 
+(defface md-table-rule '((t :strike-through t))
+  "Face for the stretch that closes a gap in a table rule.
+`shr' ends each run of a rule with a space stretched to the exact
+column boundary, which absorbs the rounding between whole characters
+and the true width.  A blank stretch leaves a visible gap in the rule,
+so it is struck through instead, which draws a line across it.")
+
 (defvar-local md--base-directory nil
   "Directory that relative image paths are resolved against.")
 
@@ -435,11 +442,21 @@ implementation detail of a library it does not own."
     (beginning-of-line)
     (looking-at "[ \t]*\u2502")))
 
+(defun md--close-rule-gaps (start end)
+  "Draw a line through the stretch spaces of the ruler between START and END."
+  (let ((pos start))
+    (while (< pos end)
+      (let ((next (next-single-property-change pos 'shr-table-indent nil end)))
+        (when (get-text-property pos 'shr-table-indent)
+          (add-face-text-property pos next 'md-table-rule))
+        (setq pos next)))))
+
 (defun md--fix-ruler (position row)
   "Rewrite the junctions of the ruler line at POSITION.
 ROW is 0 for the top ruler, 1 for a middle one and 2 for the bottom."
   (save-excursion
     (goto-char position)
+    (md--close-rule-gaps position (line-end-position))
     (let ((end (line-end-position))
           (columns '()))
       (while (search-forward "\u253c" end t)
@@ -480,7 +497,7 @@ Its width is a character count derived from the same measurement the
 tables use, so it needs the same face to come out the right length."
   (let ((start (point)))
     (shr-tag-hr dom)
-    (add-face-text-property start (point) 'fixed-pitch t)))
+    (add-face-text-property start (point) 'fixed-pitch)))
 
 (defun md--beautify-table-region (start end)
   "Give the table between START and END proper box-drawing junctions."
