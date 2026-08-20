@@ -380,3 +380,29 @@ Left alone it is a visible gap in the rule, so it is struck through."
               (setq struck (1+ struck))))))
       (should (> stretches 0))
       (should (= stretches struck)))))
+
+(ert-deftest md-render-border-face-does-not-touch-cell-text ()
+  "shr sizes a column by measuring the cell's own text, faces and all.
+Restyling that text makes it overflow the column sized for it, so only
+the border characters may be restyled.  Batch has no font metrics, so
+the face is stubbed to exercise the walk."
+  (cl-letf (((symbol-function 'md--measured-face) (lambda () '(:family "Stub"))))
+    (with-temp-buffer
+      (insert "┌──┬──┐\n│ab│cd│\n└──┴──┘\n")
+      (md--face-borders (point-min) (point-max))
+      (goto-char (point-min))
+      (should (search-forward "┌" nil t))
+      (should (equal (get-text-property (1- (point)) 'face) '(:family "Stub")))
+      ;; The cell text is left exactly as shr measured it.
+      (goto-char (point-min))
+      (should (search-forward "ab" nil t))
+      (should-not (get-text-property (- (point) 2) 'face)))))
+
+(ert-deftest md-render-border-walk-always-advances ()
+  "It runs inside rendering, where a scan that stalls hangs Emacs."
+  (cl-letf (((symbol-function 'md--measured-face) (lambda () '(:family "Stub"))))
+    (dolist (text '("" "─" "─│┌┐└┘├┤┬┴┼" "abc" "─abc─" "\n\n─\n\n" "a─b─c"))
+      (with-temp-buffer
+        (insert text)
+        (with-timeout (5 (ert-fail (format "stalled on %S" text)))
+          (md--face-borders (point-min) (point-max)))))))

@@ -521,12 +521,35 @@ happened to contain box-drawing characters."
     ;; default face, while the view shows body text in variable-pitch.  The
     ;; grid is therefore laid out in one font and drawn in another, so the
     ;; rules come up short of the verticals they should meet.  Showing the
-    ;; table in the font its geometry was computed in puts the rules back at
-    ;; the length the columns expect.  Prepended, not appended: shr puts
-    ;; `shr-text' on cell content, which names a proportional family, and the
-    ;; first face in the list wins.
-    (when-let ((face (md--measured-face)))
-      (add-face-text-property start (point) face))))
+    ;; Only the borders.  shr sizes a column by measuring the cell's own
+    ;; rendered text, faces and all, so cell content must stay in the face it
+    ;; was measured in or it overflows the column sized for it.  The rules are
+    ;; different: shr counts those in units of `-' in the default face, so
+    ;; they have to be drawn in that face to come out the right length.
+    (md--face-borders start (point))))
+
+(defconst md--box-drawing-chars
+  (append "\u2500\u2502\u250c\u2510\u2514\u2518\u251c\u2524\u252c\u2534\u253c" nil)
+  "The characters a table's borders are drawn from.")
+
+(defun md--face-borders (start end)
+  "Draw the border characters between START and END in the measured face.
+
+shr sizes a column by measuring the cell's own rendered text, faces and
+all, so cell content has to stay in the face it was measured in or it
+overflows the column sized for it.  A rule is different: shr counts it
+in units of `-\' in the default face, so it has to be drawn in that face
+to come out the right length.
+
+Deliberately a plain walk over the region rather than `skip-chars-forward\':
+this runs inside rendering, and a scan that can fail to advance hangs
+Emacs with no way out."
+  (when-let ((face (md--measured-face)))
+    (let ((pos start))
+      (while (< pos end)
+        (when (memq (char-after pos) md--box-drawing-chars)
+          (add-face-text-property pos (1+ pos) face))
+        (setq pos (1+ pos))))))
 
 (defun md--render-hr (dom)
   "Render a thematic break DOM.
