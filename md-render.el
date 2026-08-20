@@ -85,6 +85,20 @@ running its body and hooks."
   :type 'integer
   :group 'md)
 
+(defcustom md-render-table-style 'box
+  "How the borders of a table are drawn.
+
+`box\' draws rules with box-drawing characters.  `plain\' draws no rules
+at all and lets the aligned columns speak for themselves.
+
+A rule is a run of characters whose length shr computes from font
+metrics.  `plain\' has no such run, so it cannot come out the wrong
+length whatever the fonts in play; it is the setting to reach for if a
+table ever looks ragged."
+  :type '(choice (const :tag "Box-drawing characters" box)
+                 (const :tag "No rules, aligned columns only" plain))
+  :group 'md)
+
 (defcustom md-render-max-image-size (* 8 1024 1024)
   "Image files larger than this many bytes are not displayed."
   :type 'integer
@@ -475,6 +489,26 @@ ROW is 0 for the top ruler, 1 for a middle one and 2 for the bottom."
             (insert (apply #'propertize (char-to-string glyph) props)))
           (setq index (1+ index)))))))
 
+(defun md--measured-face ()
+  "The face `string-pixel-width\' measures in.
+
+shr sizes a table from `string-pixel-width\', which measures in a work
+buffer carrying no face remapping -- that is, in the frame\'s own
+default face.  Drawing the table in any other font makes its rules the
+wrong length.
+
+`fixed-pitch\' is not that font.  It names a family and leaves the
+height unspecified, so the height comes from the default face, which
+`buffer-face-set\' has remapped to `variable-pitch\' throughout the view.
+The result is a monospaced family at the body text\'s size: still not
+the size the geometry was computed at."
+  (when (display-graphic-p)
+    (let ((family (face-attribute 'default :family nil t))
+          (height (face-attribute 'default :height nil t)))
+      (append (and (stringp family) (list :family family))
+              ;; A real height is in tenths of a point; batch reports 1.
+              (and (integerp height) (> height 10) (list :height height))))))
+
 (defun md--render-table (dom)
   "Render a table DOM and mark the text it produced.
 The mark is what `md--beautify-tables\' works from.  Recognising tables
@@ -497,7 +531,8 @@ Its width is a character count derived from the same measurement the
 tables use, so it needs the same face to come out the right length."
   (let ((start (point)))
     (shr-tag-hr dom)
-    (add-face-text-property start (point) 'fixed-pitch)))
+    (when-let ((face (md--measured-face)))
+      (add-face-text-property start (point) face))))
 
 (defun md--beautify-table-region (start end)
   "Give the table between START and END proper box-drawing junctions."
@@ -540,9 +575,9 @@ width of the selected window."
         (shr-use-fonts (display-graphic-p))
         (shr-bullet "\u2022 ")
         (shr-hr-line ?\u2500)
-        (shr-table-horizontal-line ?\u2500)
-        (shr-table-vertical-line ?\u2502)
-        (shr-table-corner ?\u253c)
+        (shr-table-horizontal-line (and (eq md-render-table-style 'box) ?\u2500))
+        (shr-table-vertical-line (if (eq md-render-table-style 'box) ?\u2502 ?\s))
+        (shr-table-corner (if (eq md-render-table-style 'box) ?\u253c ?\s))
         ;; Never hand a document's media to an embedded browser, whatever the
         ;; user has configured globally.
         (shr-use-xwidgets-for-media nil)
@@ -556,7 +591,7 @@ width of the selected window."
     (run-hooks 'md-render-before-hook)
     (erase-buffer)
     (shr-insert-document dom)
-    (md--beautify-tables)
+    (when (eq md-render-table-style 'box) (md--beautify-tables))
     (setq md--line-index nil)
     (goto-char (point-min))))
 

@@ -333,23 +333,36 @@ Locally shr gets there first, so the stamping is exercised directly."
     (md--stamp-heading-level (point-min) (point-max) 5)
     (should (equal (get-text-property (point-min) 'outline-level) 1))))
 
-(ert-deftest md-render-table-is-drawn-in-a-fixed-pitch-face ()
-  "shr sizes columns in the default face; the view is variable-pitch.
-Without this the rules are drawn shorter than the columns they border."
-  (md-render-test--with "| a | b |\n|---|---|\n| 1 | 2 |\n"
-    (goto-char (point-min))
-    (should (search-forward "┌" nil t))
-    (should (memq 'fixed-pitch (md-render-test--faces-at (1- (point)))))
-    ;; Cell text too, so the whole grid shares one metric.
-    (goto-char (point-min))
-    (should (search-forward "1" nil t))
-    (should (memq 'fixed-pitch (md-render-test--faces-at (1- (point)))))))
+(ert-deftest md-render-measured-face-matches-what-shr-measured ()
+  "A table must be drawn in the font its geometry was computed in.
 
-(ert-deftest md-render-rule-is-drawn-in-a-fixed-pitch-face ()
-  (md-render-test--with "text\n\n---\n\nmore\n"
-    (goto-char (point-min))
-    (should (search-forward "─" nil t))
-    (should (memq 'fixed-pitch (md-render-test--faces-at (1- (point)))))))
+shr sizes columns with `string-pixel-width', which measures in a work
+buffer with no face remapping -- the frame's default face.  Not
+`fixed-pitch', which leaves its height unspecified and so inherits the
+height of whatever the default has been remapped to."
+  (if (display-graphic-p)
+      (let ((face (md--measured-face)))
+        (should face)
+        (should (equal (plist-get face :family)
+                       (face-attribute 'default :family nil t)))
+        (should (equal (plist-get face :height)
+                       (face-attribute 'default :height nil t))))
+    ;; Without a display there are no font metrics to disagree about.
+    (should-not (md--measured-face))))
+
+(ert-deftest md-render-plain-table-style-draws-no-rules ()
+  "The escape hatch: no run of characters, so nothing can be mis-sized."
+  (let ((md-render-table-style 'plain))
+    (md-render-test--with "| a | b |\n|---|---|\n| 1 | 2 |\n"
+      (goto-char (point-min))
+      (dolist (glyph '("┌" "┐" "└" "┘" "├" "┤" "┬" "┴" "┼" "─" "│"))
+        (goto-char (point-min))
+        (should-not (search-forward glyph nil t)))
+      ;; The content is still all there, in aligned columns.
+      (goto-char (point-min))
+      (should (search-forward "a" nil t))
+      (goto-char (point-min))
+      (should (search-forward "2" nil t)))))
 
 (ert-deftest md-render-table-rule-gaps-are-closed ()
   "shr ends each run of a rule with a blank stretch to the column edge.
