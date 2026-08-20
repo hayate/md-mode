@@ -16,6 +16,13 @@ leaves every `#`, `**` and `[label](url)` on screen, which is the right choice
 for editing. `md-mode` is for reading: the markup goes away and a document
 appears.
 
+![md-mode: Markdown source on the left, the rendered document on the right](doc/screenshot.png)
+
+The same file, both ways: `M-x md-split`. Note `md-parse.el:1` and
+`md-render.el:100` on the right - they are links to those files, because those
+files exist. `common/views/webhook.py:507` beside them is plain text, because
+it does not.
+
 ## Documentation
 
 A full Info manual ships in `doc/`. Read it inside Emacs:
