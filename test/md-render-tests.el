@@ -332,3 +332,21 @@ Locally shr gets there first, so the stamping is exercised directly."
     (put-text-property (point-min) (1+ (point-min)) 'outline-level 1)
     (md--stamp-heading-level (point-min) (point-max) 5)
     (should (equal (get-text-property (point-min) 'outline-level) 1))))
+
+(ert-deftest md-render-table-is-drawn-in-a-fixed-pitch-face ()
+  "shr sizes columns in the default face; the view is variable-pitch.
+Without this the rules are drawn shorter than the columns they border."
+  (md-render-test--with "| a | b |\n|---|---|\n| 1 | 2 |\n"
+    (goto-char (point-min))
+    (should (search-forward "┌" nil t))
+    (should (memq 'fixed-pitch (md-render-test--faces-at (1- (point)))))
+    ;; Cell text too, so the whole grid shares one metric.
+    (goto-char (point-min))
+    (should (search-forward "1" nil t))
+    (should (memq 'fixed-pitch (md-render-test--faces-at (1- (point)))))))
+
+(ert-deftest md-render-rule-is-drawn-in-a-fixed-pitch-face ()
+  (md-render-test--with "text\n\n---\n\nmore\n"
+    (goto-char (point-min))
+    (should (search-forward "─" nil t))
+    (should (memq 'fixed-pitch (md-render-test--faces-at (1- (point)))))))

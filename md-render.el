@@ -368,7 +368,8 @@ why this package carries the same licence."
                        (ul . md--render-ul)
                        (ol . md--render-ol)
                        (li . md--render-li)
-                       (table . md--render-table))))
+                       (table . md--render-table)
+                       (hr . md--render-hr))))
       (let ((fn (intern-soft (format "shr-tag-%s" tag))))
         (and (fboundp fn) fn))
       #'shr-generic))
@@ -464,7 +465,22 @@ by their glyphs instead would rewrite any code block or paragraph that
 happened to contain box-drawing characters."
   (let ((start (point)))
     (shr-tag-table dom)
-    (put-text-property start (point) 'md-table t)))
+    (put-text-property start (point) 'md-table t)
+    ;; shr sizes the columns with `string-pixel-width', which measures in the
+    ;; default face, while the view shows body text in variable-pitch.  The
+    ;; grid is therefore laid out in one font and drawn in another, so the
+    ;; rules come up short of the verticals they should meet.  Showing the
+    ;; table in a fixed-pitch face puts the drawing back in the font its
+    ;; geometry was computed in.
+    (add-face-text-property start (point) 'fixed-pitch t)))
+
+(defun md--render-hr (dom)
+  "Render a thematic break DOM.
+Its width is a character count derived from the same measurement the
+tables use, so it needs the same face to come out the right length."
+  (let ((start (point)))
+    (shr-tag-hr dom)
+    (add-face-text-property start (point) 'fixed-pitch t)))
 
 (defun md--beautify-table-region (start end)
   "Give the table between START and END proper box-drawing junctions."
