@@ -110,7 +110,7 @@ Source and rendered document side by side, in step.  @xref{Side by side}.
 Follow the link at point.  @xref{Navigating}.
 @item @key{TAB}
 Fold or unfold the section at point.  Anywhere else, move to the next link.
-@item @key{S-@key{TAB}}
+@item S-@key{TAB}
 Cycle the folding of the whole document.
 @item n
 @itemx p

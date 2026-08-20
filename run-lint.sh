@@ -1,9 +1,9 @@
 #!/bin/sh
-# Check the package the way MELPA does: package-lint, then checkdoc.
+# Check the package the way MELPA does: package-lint, checkdoc, makeinfo.
 #
-# Kept apart from run-tests.sh because this one needs the network: it
-# installs package-lint from MELPA into a throwaway directory, so your own
-# package directory is left alone.
+# Kept apart from run-tests.sh because this one needs more than Emacs: the
+# network, to install package-lint from MELPA into a throwaway directory, and
+# texinfo, for the makeinfo MELPA builds the manual with.
 set -e
 cd "$(dirname "$0")"
 
@@ -47,3 +47,19 @@ if [ -n "$problems" ]; then
     exit 1
 fi
 echo "no documentation problems"
+
+echo "== makeinfo =="
+# run-tests.sh builds the manual with texinfmt, which is what Emacs carries;
+# MELPA builds it with makeinfo, which is stricter and will report things
+# texinfmt renders without comment.  It warns rather than failing, so once
+# again any output is a failure.
+if ! command -v makeinfo >/dev/null 2>&1; then
+    echo "makeinfo not found; install texinfo to check the manual" >&2
+    exit 1
+fi
+problems=$(makeinfo --no-split doc/md-mode.texi -o /dev/null 2>&1)
+if [ -n "$problems" ]; then
+    printf '%s\n' "$problems"
+    exit 1
+fi
+echo "no manual problems"
