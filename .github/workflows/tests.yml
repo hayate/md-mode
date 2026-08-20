@@ -20,3 +20,15 @@ jobs:
           version: ${{ matrix.emacs_version }}
       - name: Byte-compile, build the manual, run the tests
         run: ./run-tests.sh
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: purcell/setup-emacs@master
+        with:
+          # Newest Emacs only: package-lint reads that release's symbol table
+          # to decide which symbols 29.1 does not have yet.
+          version: '30.1'
+      - name: Check the package the way MELPA does
+        run: ./run-lint.sh

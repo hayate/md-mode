@@ -4,7 +4,9 @@ set -e
 cd "$(dirname "$0")"
 rm -f ./*.elc
 echo "== byte-compiling =="
-emacs -Q --batch -L . --eval '(setq byte-compile-error-on-warn nil)' \
+# A warning fails the build.  MELPA will not accept a package that compiles
+# with warnings, so the rule is enforced here rather than hoped for.
+emacs -Q --batch -L . --eval '(setq byte-compile-error-on-warn t)' \
       -f batch-byte-compile md-parse.el md-render.el md-link.el md-outline.el md-mode.el
 echo "== manual =="
 emacs -Q --batch --eval '(let ((make-backup-files nil))
